@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Olam</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Olam Contributors</Authors>
+    <Description>Translate LINQ expression trees over POCO classes into OData 4.0 query options. No HTTP transport or runtime package dependencies.</Description>
+    <PackageTags>odata;linq;query;expressions</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

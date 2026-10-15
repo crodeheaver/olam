@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject Condition="'$(OfflineTests)' != 'true'">true</IsTestProject>
+    <IsTestProject Condition="'$(OfflineTests)' == 'true'">false</IsTestProject>
+    <OutputType Condition="'$(OfflineTests)' == 'true'">Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Olam/Olam.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(OfflineTests)' != 'true'">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.OData" Version="9.5.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(OfflineTests)' != 'true'">
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(OfflineTests)' == 'true'">
+    <Compile Remove="TranslationTests.cs;ServerCompatibilityTests.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(OfflineTests)' != 'true'">
+    <Compile Remove="OfflineRunner.cs" />
+  </ItemGroup>
+</Project>

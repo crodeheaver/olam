@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Olam/Olam.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Olam.Tests/Olam.Tests.csproj" />
+  </Folder>
+</Solution>
