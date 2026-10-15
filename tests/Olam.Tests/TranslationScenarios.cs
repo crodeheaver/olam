@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace Olam.Tests;
 
-// These behavioral scenarios run unchanged under xUnit and the dependency-free offline runner.
+// These behavioral scenarios are shared by xUnit and the offline runner on both targets.
 internal static class TranslationScenarios
 {
     private static IQueryable<Product> Products => ODataQuery.For<Product>();
@@ -32,7 +32,7 @@ internal static class TranslationScenarios
                 var result = Products.Where(p => p.Name == name).ToODataQuery();
                 Equal("(Name eq 'O''Brien & café? # + %20 /')", result.QueryOptions["$filter"]);
                 Equal("?$filter=" + Uri.EscapeDataString(result.QueryOptions["$filter"]), result.ToQueryString());
-                Equal(result.QueryOptions["$filter"], Uri.UnescapeDataString(result.ToQueryString()[(result.ToQueryString().IndexOf('=') + 1)..]));
+                Equal(result.QueryOptions["$filter"], Uri.UnescapeDataString(result.ToQueryString().Substring(result.ToQueryString().IndexOf('=') + 1)));
             });
             yield return ("String functions", () => Option(Products.Where(p => p.Name.Trim().ToLower().Contains("a") && p.Name.ToUpper().EndsWith("Z")),
                 "$filter", "(contains(tolower(trim(Name)),'a') and endswith(toupper(Name),'Z'))"));
@@ -65,12 +65,14 @@ internal static class TranslationScenarios
                 var date = new DateTimeOffset(2026, 10, 15, 12, 30, 0, TimeSpan.FromHours(-5));
                 Option(Products.Where(p => p.CreatedAt >= date), "$filter", "(CreatedAt ge 2026-10-15T12:30:00.0000000-05:00)");
             });
+#if NET6_0_OR_GREATER
             yield return ("Native date and time literals", () =>
             {
                 var date = new DateOnly(2026, 10, 15);
                 var time = new TimeOnly(9, 30);
                 Option(Products.Where(p => p.IntroducedOn == date && p.OpeningTime == time), "$filter", "((IntroducedOn eq 2026-10-15) and (OpeningTime eq 09:30:00.0000000))");
             });
+#endif
             yield return ("Duration literal", () =>
             {
                 var duration = TimeSpan.FromMinutes(90);
@@ -87,6 +89,21 @@ internal static class TranslationScenarios
                 var date = new DateTime(2026, 10, 15);
                 Option(Products.Select(p => new { Day = p.CreatedAt.Date }).Where(p => p.Day == date), "$filter", "(Day eq 2026-10-15)");
             });
+            yield return ("DateTime date-only comparison", () =>
+            {
+                var date = new DateTime(2026, 10, 15);
+                Option(Products.Where(p => p.UpdatedAt.Date == date), "$filter", "(date(UpdatedAt) eq 2026-10-15)");
+                Option(Products.Where(p => date == p.UpdatedAt.Date), "$filter", "(2026-10-15 eq date(UpdatedAt))");
+            });
+            yield return ("Date-only scalar projected comparison", () =>
+            {
+                var date = new DateTime(2026, 10, 15);
+                Options(Products.Select(p => p.CreatedAt.Date).Where(day => day == date),
+                    ("$apply", "compute(date(CreatedAt) as Value)"), ("$filter", "(Value eq 2026-10-15)"), ("$select", "Value"));
+            });
+            yield return ("Date-only components", () => Option(Products.Where(p => p.CreatedAt.Date.Year == 2026 && p.CreatedAt.Date.Month == 10),
+                "$filter", "((year(date(CreatedAt)) eq 2026) and (month(date(CreatedAt)) eq 10))"));
+            yield return ("Date-only time component rejected", () => Reject(Products.Where(p => p.CreatedAt.Date.Hour == 0)));
             yield return ("UTC DateTime literal", () =>
             {
                 var date = new DateTime(2026, 10, 15, 0, 0, 0, DateTimeKind.Utc);
@@ -245,7 +262,7 @@ internal static class TranslationScenarios
             {
                 var root = Products.Where(p => p.Active);
                 var result = root.Take(2).ToODataQuery();
-                Equal("(Price gt 5)", root.Where(p => p.Price > 5).ToODataQuery().QueryOptions["$filter"].Split(" and ")[1]);
+                Equal("(Price gt 5)", root.Where(p => p.Price > 5).ToODataQuery().QueryOptions["$filter"].Split(new[] { " and " }, StringSplitOptions.None)[1]);
                 Equal("2", result.QueryOptions["$top"]);
                 Equal(false, root.ToODataQuery().QueryOptions.ContainsKey("$top"));
                 Throws<NotSupportedException>(() => ((IDictionary<string, string>)result.QueryOptions).Add("$top", "3"));
@@ -273,7 +290,10 @@ internal static class TranslationScenarios
             yield return ("Unsupported grouping after paging", () => Reject(Products.Take(2).GroupBy(p => p.Category).Select(g => new { g.Key })));
             yield return ("Unsupported scalar aggregation after paging", () => Throws<ODataTranslationException>(() => Products.Take(2).ToODataQuery(q => q.Count())));
             yield return ("Unsupported custom method", () => Reject(Products.Where(p => CustomPredicate(p.Name))));
+#if NET6_0_OR_GREATER
             yield return ("Unsupported string comparison overload", () => Reject(Products.Where(p => p.Name.Contains("a", StringComparison.OrdinalIgnoreCase))));
+#endif
+            yield return ("Unsupported StartsWith comparison overload", () => Reject(Products.Where(p => p.Name.StartsWith("a", StringComparison.OrdinalIgnoreCase))));
             yield return ("Unsupported indexed lambda", () => Reject(Products.Where((p, i) => p.Id == i)));
             yield return ("Unsupported custom comparer", () => Reject(Products.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)));
             yield return ("Unsupported Distinct comparer", () => Reject(Products.Select(p => p.Name).Distinct(StringComparer.OrdinalIgnoreCase)));
@@ -300,13 +320,28 @@ internal static class TranslationScenarios
                 Reject(Products.Where(p => p.UpdatedAt == date));
             });
             yield return ("Invalid identifier rejected", () => Throws<ArgumentException>(() => new ODataQueryOptions().MapProperty<Product, string>(p => p.Name, "Name&$top=1")));
+            yield return ("Null arguments identify parameters", () =>
+            {
+                Equal("query", Throws<ArgumentNullException>(() => ODataQueryableExtensions.ToODataQuery<Product>(null!)).ParamName);
+                Equal("property", Throws<ArgumentNullException>(() => new ODataQueryOptions().MapProperty<Product, string>(null!, "Name")).ParamName);
+                Equal("name", Throws<ArgumentNullException>(() => new ODataQueryOptions().MapProperty<Product, string>(p => p.Name, null!)).ParamName);
+                Equal("edmTypeName", Throws<ArgumentNullException>(() => new ODataQueryOptions().MapEnum<ProductStatus>(null!)).ParamName);
+            });
+            yield return ("Blank mapping names identify parameters", () =>
+            {
+                foreach (var name in new[] { "", " ", "\t\r\n", "\u2003" })
+                {
+                    Equal("name", Throws<ArgumentException>(() => new ODataQueryOptions().MapProperty<Product, string>(p => p.Name, name)).ParamName);
+                    Equal("edmTypeName", Throws<ArgumentException>(() => new ODataQueryOptions().MapEnum<ProductStatus>(name)).ParamName);
+                }
+            });
             yield return ("Nested mapping selector rejected", () => Throws<ArgumentException>(() => new ODataQueryOptions().MapProperty<Product, string>(p => p.Supplier.Name, "Name")));
             yield return ("Foreign query rejected", () => Throws<ArgumentException>(() => new List<Product>().AsQueryable().ToQueryString()));
             yield return ("Translation exception identifies expression", () =>
             {
                 var error = Throws<ODataTranslationException>(() => Products.Take(2).Where(p => p.Active).ToQueryString());
                 Equal(true, error.Expression is MethodCallExpression);
-                Equal(true, error.Message.Contains("Where", StringComparison.Ordinal));
+                Equal(true, error.Message.IndexOf("Where", StringComparison.Ordinal) >= 0);
             });
         }
     }
@@ -318,7 +353,7 @@ internal static class TranslationScenarios
     private static void Result(ODataQueryResult result, params (string Key, string Value)[] expected)
     {
         Equal(expected.Length, result.QueryOptions.Count);
-        foreach (var (key, value) in expected) Equal(value, result.QueryOptions.GetValueOrDefault(key));
+        foreach (var (key, value) in expected) Equal(value, result.QueryOptions[key]);
     }
     private static void Reject<T>(IQueryable<T> query) => Throws<ODataTranslationException>(() => query.ToQueryString());
     private static void Equal<T>(T expected, T actual)

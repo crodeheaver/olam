@@ -1,6 +1,6 @@
 # Olam
 
-Olam is a .NET 10 library that translates C# LINQ expression trees over POCO types into **OData 4.0 query options**. It has no third-party runtime dependencies. It generates queries only: it does not send requests, load service metadata, or deserialize responses.
+Olam is a .NET 10 and .NET Framework 4.8 library that translates C# LINQ expression trees over POCO types into **OData 4.0 query options**. The .NET 10 target has no runtime package dependencies. The .NET Framework 4.8 target uses `System.Text.Json` and its dependencies for JSON naming support. It generates queries only: it does not send requests, load service metadata, or deserialize responses.
 
 ## Basic use
 
@@ -49,7 +49,7 @@ Filters and computed expressions support comparisons, Boolean operators, arithme
 
 Supported string functions are `Contains(string)`, `StartsWith(string)`, `EndsWith(string)`, parameterless `ToLower`, `ToUpper`, `Trim`, `Substring`, `Length`, `Equals(string)`, two-string concatenation, and `IsNullOrEmpty`. Supported date components are `Year`, `Month`, `Day`, `Hour`, `Minute`, `Second`, and `Date` where available. `Math.Round`, `Floor`, and `Ceiling` with one argument map to OData functions.
 
-Literal support includes strings, characters, Booleans, numbers, GUIDs, named enums and flags, `DateOnly`, `TimeOnly`, `DateTimeOffset`, `DateTime`, `TimeSpan`, binary values, and null. Numbers and dates use invariant formatting. `DateTime` values must have UTC or Local kind; use `DateOnly` for dates without a time zone.
+Literal support includes strings, characters, Booleans, numbers, GUIDs, named enums and flags, `DateTimeOffset`, `DateTime`, `TimeSpan`, binary values, and null. The .NET 10 target also supports native `DateOnly` and `TimeOnly` values; those CLR types are unavailable on .NET Framework 4.8. Numbers and dates use invariant formatting. Timestamp `DateTime` literals must have UTC or Local kind. Both targets translate `DateTime.Date` and `DateTimeOffset.Date` as OData dates and format captured `DateTime` values compared to those expressions as date-only literals, including values with unspecified kind.
 
 ## Grouping and computed projections
 
@@ -156,7 +156,7 @@ The generated expressions follow OData/server semantics for nulls, empty aggrega
 
 ## Build and test
 
-Requires a .NET 10 SDK. The standard test project restores xUnit and Microsoft ASP.NET Core OData packages; those dependencies are confined to tests.
+Requires a .NET 10 SDK. Both the library and tests target `net10.0` and `net48`. Building `net48` requires the .NET Framework 4.8 targeting pack, or the reference assemblies package restored automatically by the SDK when the targeting pack is unavailable. Running the `net48` tests requires Windows with .NET Framework 4.8 or later installed. The standard test project restores xUnit for both targets and Microsoft ASP.NET Core OData for .NET 10; those dependencies are confined to tests.
 
 ```text
 dotnet build Olam.slnx -c Release
@@ -164,12 +164,18 @@ dotnet test Olam.slnx -c Release
 dotnet pack src/Olam/Olam.csproj -c Release -o artifacts
 ```
 
-The test suite includes shared translation regression scenarios, EDM parsing checks, and server query-option application against seeded POCO collections. Server tests compare results to equivalent LINQ without an HTTP server or an HttpClient.
+The test suite runs shared translation regression scenarios on both targets, with native date/time scenarios on .NET 10. EDM parsing checks and server query-option application against seeded POCO collections run on .NET 10 because the ASP.NET Core OData test dependency requires modern .NET. Server tests compare results to equivalent LINQ without an HTTP server or an HttpClient. To test one target, add `-f net10.0` or `-f net48` to `dotnet test`.
 
 For an environment without NuGet access, run the same translation scenarios using the dependency-free runner:
 
 ```text
-dotnet run --project tests/Olam.Tests -c Release -p:OfflineTests=true
+dotnet run --project tests/Olam.Tests -c Release -f net10.0 -p:TargetFrameworks=net10.0 -p:OfflineTests=true
 ```
 
-That mode excludes xUnit discovery, Microsoft OData parsing, and server compatibility tests. It does not establish server compatibility. On restricted Windows hosts that cannot launch MSBuild worker/compiler servers, add `-m:1 -nr:false -p:UseSharedCompilation=false` to build commands.
+The explicit target override keeps this restore independent of the .NET Framework runtime packages. Once those packages have been restored, the runner also works on Windows with .NET Framework 4.8:
+
+```text
+dotnet run --project tests/Olam.Tests -c Release -f net48 -p:TargetFrameworks=net48 -p:OfflineTests=true
+```
+
+Offline mode excludes xUnit discovery, Microsoft OData parsing, and server compatibility tests. It does not establish server compatibility. On restricted Windows hosts that cannot launch MSBuild worker/compiler servers, add `-m:1 -nr:false -p:UseSharedCompilation=false` to build commands.

@@ -54,17 +54,17 @@ internal sealed class ExpressionWriter(ODataQueryOptions options)
         }
         if (type == typeof(string) && member.Member.Name == nameof(string.Length))
             return new ValueBinding(member.Type, "length(" + Text(parent, member) + ")");
-        if (type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(DateOnly) || type == typeof(TimeOnly))
+        if (IsDateOrTime(type))
         {
             var function = member.Member.Name switch
             {
                 "Year" => "year", "Month" => "month", "Day" => "day", "Hour" => "hour",
                 "Minute" => "minute", "Second" => "second", "Date" => "date", _ => null
             };
-            if (parent.Type == typeof(DateOnly) && function is "hour" or "minute" or "second")
+            if (IsDateOnly(parent.Type) && function is "hour" or "minute" or "second")
                 throw Error("An OData date-only value has no time component.", member);
             return function is null ? throw Error("Unsupported date/time member.", member)
-                : new ValueBinding(function == "date" ? typeof(DateOnly) : member.Type, function + "(" + Text(parent, member) + ")");
+                : new ValueBinding(function == "date" ? typeof(ODataDate) : member.Type, function + "(" + Text(parent, member) + ")");
         }
         if (member.Member.Name == "Count" && typeof(IEnumerable).IsAssignableFrom(target.Type))
             return new ValueBinding(member.Type, Text(parent, member) + "/$count");
@@ -86,10 +86,8 @@ internal sealed class ExpressionWriter(ODataQueryOptions options)
     private string Binary(BinaryExpression binary, IReadOnlyDictionary<ParameterExpression, Binding> scope)
     {
         if (binary.Method is not null && binary.Method.DeclaringType != typeof(string)
-            && binary.Method.DeclaringType != typeof(decimal) && binary.Method.DeclaringType != typeof(DateTime)
-            && binary.Method.DeclaringType != typeof(DateTimeOffset) && binary.Method.DeclaringType != typeof(TimeSpan)
-            && binary.Method.DeclaringType != typeof(Guid) && binary.Method.DeclaringType != typeof(DateOnly)
-            && binary.Method.DeclaringType != typeof(TimeOnly))
+            && binary.Method.DeclaringType != typeof(decimal) && !IsDateOrTime(binary.Method.DeclaringType)
+            && binary.Method.DeclaringType != typeof(TimeSpan) && binary.Method.DeclaringType != typeof(Guid))
             throw Error("Custom operator overloads cannot be translated.", binary);
         if (binary.NodeType == ExpressionType.Add && binary.Type == typeof(string))
             return "concat(" + Write(binary.Left, scope) + "," + Write(binary.Right, scope) + ")";
@@ -117,8 +115,8 @@ internal sealed class ExpressionWriter(ODataQueryOptions options)
         var enumType = Nullable.GetUnderlyingType(other.Type) ?? other.Type;
         if (enumType.IsEnum && !expression.Type.IsEnum && TryEvaluate(expression, out var value) && value is not null)
             return Literal(Enum.ToObject(enumType, value), expression);
-        if (Resolve(other, scope)?.Type == typeof(DateOnly) && TryEvaluate(expression, out var date) && date is DateTime dateTime)
-            return Literal(DateOnly.FromDateTime(dateTime), expression);
+        if (IsDateOnly(Resolve(other, scope)?.Type) && TryEvaluate(expression, out var date) && date is DateTime dateTime)
+            return Literal(new ODataDate(dateTime), expression);
         return Write(expression, scope);
     }
 
@@ -174,7 +172,7 @@ internal sealed class ExpressionWriter(ODataQueryOptions options)
             return "(" + value + " eq null or " + value + " eq '')";
         }
         if (call.Object is null && call.Method.Name == "Concat" && call.Arguments.Count == 2 && call.Arguments.All(a => a.Type == typeof(string)))
-            return "concat(" + string.Join(',', call.Arguments.Select(a => Write(a, scope))) + ")";
+            return "concat(" + string.Join(",", call.Arguments.Select(a => Write(a, scope))) + ")";
         var function = call.Method.Name switch
         {
             "Contains" when call.Arguments.Count == 1 && call.Arguments[0].Type == typeof(string) => "contains",
@@ -187,7 +185,7 @@ internal sealed class ExpressionWriter(ODataQueryOptions options)
         };
         if (function is null || call.Object is null) throw Error("Unsupported string method or overload.", call);
         if (function == "eq") return "(" + Write(call.Object, scope) + " eq " + Write(call.Arguments[0], scope) + ")";
-        return function + "(" + string.Join(',', new[] { call.Object }.Concat(call.Arguments).Select(a => Write(a, scope))) + ")";
+        return function + "(" + string.Join(",", new[] { call.Object }.Concat(call.Arguments).Select(a => Write(a, scope))) + ")";
     }
 
     private string Quantifier(MethodCallExpression call, IReadOnlyDictionary<ParameterExpression, Binding> scope)
@@ -200,10 +198,8 @@ internal sealed class ExpressionWriter(ODataQueryOptions options)
         var predicate = Expressions.Lambda(call.Arguments[1]);
         if (predicate.Parameters.Count != 1) throw Error("Indexed predicates are unsupported.", call);
         var variable = "v" + _lambdaId++;
-        var nested = new Dictionary<ParameterExpression, Binding>(scope)
-        {
-            [predicate.Parameters[0]] = new PathBinding(predicate.Parameters[0].Type, variable, false)
-        };
+        var nested = DictionaryCompatibility.Copy(scope);
+        nested[predicate.Parameters[0]] = new PathBinding(predicate.Parameters[0].Type, variable, false);
         _lambdaDepth++;
         try { return collection + "/" + operation + "(" + variable + ":" + Write(predicate.Body, nested) + ")"; }
         finally { _lambdaDepth--; }
@@ -219,7 +215,7 @@ internal sealed class ExpressionWriter(ODataQueryOptions options)
             && (spanType.GetGenericTypeDefinition() == typeof(Span<>) || spanType.GetGenericTypeDefinition() == typeof(ReadOnlySpan<>))
             && conversion.Arguments[0].Type.IsArray)
             source = conversion.Arguments[0];
-        var item = call.Arguments[^1];
+        var item = call.Arguments[call.Arguments.Count - 1];
         if (TryEvaluate(source, out var value) && value is IEnumerable sequence)
         {
             var collectionType = value.GetType();
@@ -283,8 +279,19 @@ internal sealed class ExpressionWriter(ODataQueryOptions options)
 
     internal static bool IsPrimitive(Type type)
         => type.IsPrimitive || type.IsEnum || type == typeof(string) || type == typeof(decimal) || type == typeof(Guid)
-            || type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(DateOnly)
-            || type == typeof(TimeOnly) || type == typeof(TimeSpan) || type == typeof(byte[]);
+            || IsDateOrTime(type) || type == typeof(TimeSpan) || type == typeof(byte[]);
+
+    private static bool IsDateOnly(Type? type) => type == typeof(ODataDate)
+#if NET6_0_OR_GREATER
+        || type == typeof(DateOnly)
+#endif
+        ;
+
+    private static bool IsDateOrTime(Type? type) => type == typeof(DateTime) || type == typeof(DateTimeOffset) || IsDateOnly(type)
+#if NET6_0_OR_GREATER
+        || type == typeof(TimeOnly)
+#endif
+        ;
 
     private static ODataTranslationException Error(string message, Expression expression) => new(message, expression);
 }

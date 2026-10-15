@@ -18,8 +18,10 @@ public sealed class Product
     public ProductStatus Status { get; set; }
     public Guid Sku { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+#if NET6_0_OR_GREATER
     public DateOnly IntroducedOn { get; set; }
     public TimeOnly OpeningTime { get; set; }
+#endif
     public DateTime UpdatedAt { get; set; }
     public TimeSpan Duration { get; set; }
     public Supplier Supplier { get; set; } = new();

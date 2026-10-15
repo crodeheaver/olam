@@ -20,7 +20,7 @@ public sealed class ODataQueryOptions
     /// <summary>Overrides a direct POCO property's EDM name.</summary>
     public ODataQueryOptions MapProperty<T, TProperty>(Expression<Func<T, TProperty>> property, string name)
     {
-        ArgumentNullException.ThrowIfNull(property);
+        ArgumentGuard.ThrowIfNull(property);
         Names.Validate(name);
         if (Expressions.Unwrap(property.Body) is not MemberExpression { Member: PropertyInfo member } access
             || access.Expression != property.Parameters[0])
@@ -32,7 +32,7 @@ public sealed class ODataQueryOptions
     /// <summary>Overrides the namespace-qualified EDM type name used in enum literals.</summary>
     public ODataQueryOptions MapEnum<TEnum>(string edmTypeName) where TEnum : struct, Enum
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(edmTypeName);
+        ArgumentGuard.ThrowIfNullOrWhiteSpace(edmTypeName);
         foreach (var part in edmTypeName.Split('.')) Names.Validate(part);
         if (!edmTypeName.Contains('.'))
             throw new ArgumentException("An EDM enum type name must be namespace-qualified.", nameof(edmTypeName));
@@ -65,7 +65,7 @@ internal static class Names
 {
     internal static void Validate(string name)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentGuard.ThrowIfNullOrWhiteSpace(name);
         if (!(char.IsLetter(name[0]) || name[0] == '_') || name.Any(c => !(char.IsLetterOrDigit(c) || c == '_')))
             throw new ArgumentException($"'{name}' is not a valid OData identifier.", nameof(name));
     }

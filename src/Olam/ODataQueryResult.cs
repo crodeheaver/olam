@@ -6,7 +6,7 @@ namespace Olam;
 public sealed class ODataQueryResult
 {
     internal ODataQueryResult(IEnumerable<KeyValuePair<string, string>> options)
-        => QueryOptions = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(options));
+        => QueryOptions = new ReadOnlyDictionary<string, string>(DictionaryCompatibility.Copy(options));
 
     /// <summary>OData option names and raw, unescaped option values.</summary>
     public IReadOnlyDictionary<string, string> QueryOptions { get; }

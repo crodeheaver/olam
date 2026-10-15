@@ -17,7 +17,7 @@ public static class ODataQueryableExtensions
     public static ODataQueryResult ToODataQuery<T, TResult>(this IQueryable<T> query,
         Expression<Func<IQueryable<T>, TResult>> aggregate)
     {
-        ArgumentNullException.ThrowIfNull(aggregate);
+        ArgumentGuard.ThrowIfNull(aggregate);
         var provider = Provider(query);
         var body = new Substitute(aggregate.Parameters[0], query.Expression).Visit(aggregate.Body)!;
         return new QueryTranslator(provider).TranslateScalar(body);
@@ -33,7 +33,7 @@ public static class ODataQueryableExtensions
     /// <summary>Expands a navigation property. Paths through singleton navigation properties are supported.</summary>
     public static IQueryable<T> Expand<T, TNavigation>(this IQueryable<T> query, Expression<Func<T, TNavigation>> navigation)
     {
-        ArgumentNullException.ThrowIfNull(navigation);
+        ArgumentGuard.ThrowIfNull(navigation);
         return Marker(query, (MethodInfo)MethodBase.GetCurrentMethod()!, [typeof(T), typeof(TNavigation)], Expression.Quote(navigation));
     }
 
@@ -42,8 +42,8 @@ public static class ODataQueryableExtensions
         Expression<Func<T, IEnumerable<TElement>>> navigation,
         Expression<Func<IQueryable<TElement>, IQueryable<TResult>>> configure)
     {
-        ArgumentNullException.ThrowIfNull(navigation);
-        ArgumentNullException.ThrowIfNull(configure);
+        ArgumentGuard.ThrowIfNull(navigation);
+        ArgumentGuard.ThrowIfNull(configure);
         return Marker(query, (MethodInfo)MethodBase.GetCurrentMethod()!, [typeof(T), typeof(TElement), typeof(TResult)],
             Expression.Quote(navigation), Expression.Quote(configure));
     }
@@ -53,8 +53,8 @@ public static class ODataQueryableExtensions
         Expression<Func<T, TNavigation>> navigation,
         Expression<Func<IQueryable<TNavigation>, IQueryable<TResult>>> configure)
     {
-        ArgumentNullException.ThrowIfNull(navigation);
-        ArgumentNullException.ThrowIfNull(configure);
+        ArgumentGuard.ThrowIfNull(navigation);
+        ArgumentGuard.ThrowIfNull(configure);
         return Marker(query, (MethodInfo)MethodBase.GetCurrentMethod()!, [typeof(T), typeof(TNavigation), typeof(TResult)],
             Expression.Quote(navigation), Expression.Quote(configure));
     }
@@ -68,7 +68,7 @@ public static class ODataQueryableExtensions
 
     private static ODataQueryProvider Provider<T>(IQueryable<T> query)
     {
-        ArgumentNullException.ThrowIfNull(query);
+        ArgumentGuard.ThrowIfNull(query);
         return query.Provider as ODataQueryProvider ?? throw new ArgumentException("The query must originate from ODataQuery.For<T>().", nameof(query));
     }
 }

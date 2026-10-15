@@ -124,7 +124,7 @@ internal sealed class QueryTranslator
                 RequireUnpaged(model, call);
                 if (model.Select.Count == 0 || model.Expand.Count > 0 || model.OrderBy.Count > 0)
                     throw Error("Distinct requires a property projection without expansion or preceding ordering.", call);
-                model.AddTransformation("groupby((" + string.Join(',', model.Select.Distinct(StringComparer.Ordinal)) + "))");
+                model.AddTransformation("groupby((" + string.Join(",", model.Select.Distinct(StringComparer.Ordinal)) + "))");
                 break;
             case nameof(Queryable.AsQueryable):
                 RequireArguments(call, 1);
@@ -142,7 +142,7 @@ internal sealed class QueryTranslator
         var binding = Projection(body, scope, (value, name, origin) => SelectValue(model, value, name, origin, computations, selected));
         if (computations.Count > 0 && model.Expand.Count > 0)
             throw Error("Computed projections cannot be combined with expansion.", body);
-        if (computations.Count > 0) model.AddTransformation("compute(" + string.Join(',', computations) + ")");
+        if (computations.Count > 0) model.AddTransformation("compute(" + string.Join(",", computations) + ")");
         model.Current = binding;
         model.Select.Clear();
         model.Select.AddRange(selected);
@@ -218,7 +218,7 @@ internal sealed class QueryTranslator
             if (!model.GroupKeys.Contains(path.Path, StringComparer.Ordinal)) model.GroupKeys.Add(path.Path);
             return path;
         });
-        if (computations.Count > 0) model.AddTransformation("compute(" + string.Join(',', computations) + ")");
+        if (computations.Count > 0) model.AddTransformation("compute(" + string.Join(",", computations) + ")");
         var groupingType = call.Type.GetGenericArguments()[0];
         var group = new GroupBinding(groupingType, key, model.Current);
         model.PendingGroup = group;
@@ -324,12 +324,12 @@ internal sealed class QueryTranslator
             }
             else projected = SelectValue(model, BindSlot(body, "Value"), null, body, computations, selected);
 
-            var aggregation = aggregates.Count > 0 ? "aggregate(" + string.Join(',', aggregates) + ")" : "";
+            var aggregation = aggregates.Count > 0 ? "aggregate(" + string.Join(",", aggregates) + ")" : "";
             if (model.GroupKeys.Count > 0)
-                model.AddTransformation("groupby((" + string.Join(',', model.GroupKeys) + ")" + (aggregation.Length > 0 ? "," + aggregation : "") + ")");
+                model.AddTransformation("groupby((" + string.Join(",", model.GroupKeys) + ")" + (aggregation.Length > 0 ? "," + aggregation : "") + ")");
             else if (aggregation.Length > 0) model.AddTransformation(aggregation);
             else throw Error("Constant grouping requires at least one aggregate.", origin);
-            if (computations.Count > 0) model.AddTransformation("compute(" + string.Join(',', computations) + ")");
+            if (computations.Count > 0) model.AddTransformation("compute(" + string.Join(",", computations) + ")");
             model.Select.Clear();
             model.Select.AddRange(selected);
             model.Current = projected;
@@ -369,7 +369,7 @@ internal sealed class QueryTranslator
             if (options.ContainsKey("$apply")) throw Error("Nested expansion supports property selection, filtering, ordering, paging, count, and expansion; nested $apply is unsupported.", call);
             if (call.Method.Name == nameof(ODataQueryableExtensions.ExpandSingle) && options.Keys.Any(k => k is not "$select" and not "$expand"))
                 throw Error("Singleton expansion permits only selection and further expansion.", call);
-            if (options.Count > 0) expansion += "(" + string.Join(';', options.Select(p => p.Key + "=" + p.Value)) + ")";
+            if (options.Count > 0) expansion += "(" + string.Join(";", options.Select(p => p.Key + "=" + p.Value)) + ")";
         }
         if (model.Expand.TryGetValue(path.Path, out var prior) && prior != expansion)
             throw Error("Conflicting options for the same expansion path.", call);

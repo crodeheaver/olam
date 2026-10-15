@@ -31,13 +31,13 @@ internal sealed class QueryModel(Type rootType)
     internal ODataQueryResult Render()
     {
         var result = new Dictionary<string, string>();
-        if (Apply.Count > 0) result.Add("$apply", string.Join('/', Apply));
+        if (Apply.Count > 0) result.Add("$apply", string.Join("/", Apply));
         if (Filters.Count > 0) result.Add("$filter", string.Join(" and ", Filters));
-        if (OrderBy.Count > 0) result.Add("$orderby", string.Join(',', OrderBy));
+        if (OrderBy.Count > 0) result.Add("$orderby", string.Join(",", OrderBy));
         if (Skip > 0) result.Add("$skip", Skip.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (Top.HasValue) result.Add("$top", Top.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        if (Select.Count > 0) result.Add("$select", string.Join(',', Select.Distinct(StringComparer.Ordinal)));
-        if (Expand.Count > 0) result.Add("$expand", string.Join(',', Expand.Values));
+        if (Select.Count > 0) result.Add("$select", string.Join(",", Select.Distinct(StringComparer.Ordinal)));
+        if (Expand.Count > 0) result.Add("$expand", string.Join(",", Expand.Values));
         if (IncludeCount) result.Add("$count", "true");
         return new ODataQueryResult(result);
     }
